@@ -3,6 +3,11 @@ from pprint import pprint
 from datetime import datetime
 import os
 
+def line(k=30):
+    print()
+    print('---'*k)
+
+
 class VK:
     
     base_url = 'https://api.vk.com/method/'
@@ -11,35 +16,52 @@ class VK:
         """Метод инициализации класса VK"""
         self.token = access_token
         self.id = user_id
+        print(f"Инициализация класса: {self.id}")
         self.version = version
         self.params = {'access_token': self.token, 'v': self.version}
 
-    def users_info(self):
-        """Метод вывода информации о пользователе по запросу users.get"""
-        url = self.base_url + 'users.get'
-        print('-'*10)
-        print(url)
-        params = {'user_ids': self.id}
-        response = requests.get(url, params={**self.params, **params})
-        return response.json()
-
-    def get_user_profile_photo(self):
+    def get_user_profile_one_photo(self, owner_id):
         """Метод получения фото из профиля пользователя VK"""
         url = self.base_url + 'photos.get'
-        print('-'*10)
+        line()
         print(url)
-        params = {'album_id': 'profile'}
+        print(f'owner_id: {owner_id} ')
+        params = {'owner_id': f'{owner_id}', 'album_id': 'profile', 'extended': '1'}
         res = requests.get(url, params={**self.params, **params}).json()
-        photos = list(res['response']['items'][0]['sizes'])
-        print('_________')
-        print('_________')
+        line()
         pprint(res)
-        print('_________')
-        print('_________')
+        line()
+        photos = list(res['response']['items'][0]['sizes'])
         dict_photos = {photos[el]['url']:photos[el]['height'] for el in range(1, len(photos))}
         print(max(dict_photos))
         return max(dict_photos)
 
+    def get_user_profile_photo_list(self, owner_id, q = 5):
+        """Метод получения списка photo_url+likes.count из профиля пользователя VK"""
+        url = self.base_url + 'photos.get'
+        line()
+        print(url)
+        print(f'Owner_id:  {owner_id}')
+        params = {'owner_id': f'{owner_id}', 'album_id': 'profile', 'extended': '1'} #extend - расширяет кол-во выдаваемых в ответе полей(для определения лайков)
+        res = requests.get(url, params={**self.params, **params}).json()
+        line()
+        pprint(res)
+        line()
+        list_photos=[]
+        for item in res['response']['items']:
+            ph_date = item['date']
+            ph_date = datetime.utcfromtimestamp(ph_date).strftime('%Y-%m-%d_%H-%M-%S') #преобразование времени из unixtime в utc-формат
+            
+            #поиск url-фото с максимальным размером
+            photos = list(item['sizes'])
+            dict_photos = {photos[el]['url']:photos[el]['height'] for el in range(1, len(photos))}
+            #добавление информации о фотографии в список
+            list_photos.append({'photo_id': item['id'],
+                                'date': ph_date,
+                                'likes': item['likes']['count'],
+                                'url_max_photo_size': max(dict_photos)})
+        return list_photos
+        
 class Yandex:
     
     base_host = "https://cloud-api.yandex.net:443/"
@@ -115,26 +137,34 @@ class Log:
 if __name__ == '__main__':
     # Создание экземпляра класса Log для записи действий программы в лог-файл
     log = Log(datetime.now())
-    # Получить токен vk и id пользователя из файла Settings_vk.txt 
+    
+    # Получение токен vk из файла Settings_vk.txt
     with open('Settings_vk.txt', 'rt', encoding='utf-8') as file:
-        user_id = file.readline()
         vk_token = file.readline()
-    log.write_event(datetime.now(), 'Загружен токен и user ID для VK.')
+        user_id = file.readline()
+    log.write_event(datetime.now(), 'Загружен токен и user ID для VK из файла Settings_vk.txt')
+    
+    # Запрос информации от пользователя (user_id)
+    owner_id = input("Введите user_id для VK пользователя, у которого необходимо скопировать фото: ")
+    log.write_event(datetime.now(), f'От пользователя получен owner_id: {owner_id}')
 
+    # Создание экземпляра класса VK, для получения фотографий
     vk = VK(vk_token, user_id)
     log.write_event(datetime.now(), 'Авторизация в сервисах VK.')
-    #print(vk.users_info())
-    pprint(vk.get_user_profile_photo())
+
+    #Получение списка фотографий с атрибутами (photo_id, date, likes, url_max_photo_size)
+    print("________________GET__Q_PHOTOS___________________")
+    pprint(vk.get_user_profile_photo_list(owner_id))
 
     # Получить токен для Яндекс.полигон из файла Settings_ya.txt 
     with open('Settings_ya.txt', 'rt', encoding='utf-8') as file:
         ya_token = file.readline()
-    log.write_event(datetime.now(), 'Загружен токен для Яндекс.Полигон.')
+    log.write_event(datetime.now(), 'Загружен токен для Яндекс.Полигон из файла Settings_ya.txt')
     
     uploader = Yandex(ya_token)
     log.write_event(datetime.now(), 'Авторизация в Яндекс.Полигон.')
     #print(uploader.upload('star.jpg', '/VK_Photos/New.jpg'))
-    uploader.upload_from_vk(vk.get_user_profile_photo(), '/VK_Photos/New.jpg')
-    log.write_event(datetime.now(), 'Загрузка фото из профиля пользователя VK на Яндекс.Диск.')
+    uploader.upload_from_vk(vk.get_user_profile_one_photo(owner_id), '/VK_Photos/New.jpg')
+    log.write_event(datetime.now(), f'Загрузка фото из профиля пользователя {owner_id} VK на Яндекс.Диск.')
 
     print("__________________")
