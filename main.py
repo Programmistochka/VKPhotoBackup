@@ -3,11 +3,6 @@ from pprint import pprint
 from datetime import datetime
 import os
 
-def line(k=30):
-    print()
-    print('---'*k)
-
-
 class VK:
     
     base_url = 'https://api.vk.com/method/'
@@ -20,33 +15,14 @@ class VK:
         self.version = version
         self.params = {'access_token': self.token, 'v': self.version}
 
-    def get_user_profile_one_photo(self, owner_id):
-        """Метод получения фото из профиля пользователя VK"""
-        url = self.base_url + 'photos.get'
-        line()
-        print(url)
-        print(f'owner_id: {owner_id} ')
-        params = {'owner_id': f'{owner_id}', 'album_id': 'profile', 'extended': '1'}
-        res = requests.get(url, params={**self.params, **params}).json()
-        line()
-        pprint(res)
-        line()
-        photos = list(res['response']['items'][0]['sizes'])
-        dict_photos = {photos[el]['url']:photos[el]['height'] for el in range(1, len(photos))}
-        print(max(dict_photos))
-        return max(dict_photos)
-
     def get_user_profile_photo_list(self, owner_id, q = 5):
         """Метод получения списка photo_url+likes.count из профиля пользователя VK"""
         url = self.base_url + 'photos.get'
-        line()
-        print(url)
-        print(f'Owner_id:  {owner_id}')
+        #print(url)
+        #print(f'Owner_id:  {owner_id}')
         params = {'owner_id': f'{owner_id}', 'album_id': 'profile', 'extended': '1'} #extend - расширяет кол-во выдаваемых в ответе полей(для определения лайков)
         res = requests.get(url, params={**self.params, **params}).json()
-        line()
-        pprint(res)
-        line()
+        #pprint(res)
         list_photos=[]
         for item in res['response']['items']:
             ph_date = item['date']
@@ -83,32 +59,24 @@ class Yandex:
         request_url = self.base_host + url
         params = {'path': path, 'overwrite': True}
         response = requests.get(request_url, headers = self.get_headers(), params = params)
-        #print(response.status_code)
         return response.json()['href']
 
-    def upload(self, file_path: str, yandex_path):
-        """Метод загружает файл с локального компа на яндекс диск"""
-        upload_url = self._get_upload_link(yandex_path)
-        response = requests.put(upload_url, data=open(file_path, 'rb'), headers = self.get_headers())
-        if response.status_code == 201:
-            print('Загрузка прошла успешно')
-
-    def upload_from_vk(self, url, ya_path):
+    def upload_photos_from_vk(self, photo_list, ya_path):
         """Метод загружает фото из интернета на яндекс диск"""
-        print('________________________')
         ya_url = 'v1/disk/resources/upload/'
         request_url = self.base_host + ya_url
-        print(f'request_url: {request_url}')
-        print(f'url: {url}')
-        print(f'ya_path: {ya_path}')
-        #url = 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/be/A_rose_flower.jpg/220px-A_rose_flower.jpg'
-        params = {'url': url, 'path': ya_path}
-
-        response = requests.post(request_url, params=params, headers = self.get_headers())
-        print('________________________')
-        print(response.status_code)
-        pprint(response.json())
-        return response
+        likes_list = [photo_list[n]['likes'] for n in range(0, len(photo_list))]
+        for el in photo_list:
+            if likes_list.count(el['likes']) == 1:
+                el_path = ya_path + str(el['likes']) + '.jpg'
+            else:
+                el_path = ya_path + str(el['likes']) + '_' + str(el['date']) + '.jpg' 
+            params = {'url': el['url_max_photo_size'], 'path': el_path}
+            response = requests.post(request_url, params=params, headers = self.get_headers())
+            print('---'*30)
+            if response.status_code == 202:
+                print(f'Фото {el["photo_id"]} загружено на Яндекс.Диск в каталог {el_path}')
+        return response.json()
 
 class Log:
 
@@ -152,19 +120,23 @@ if __name__ == '__main__':
     vk = VK(vk_token, user_id)
     log.write_event(datetime.now(), 'Авторизация в сервисах VK.')
 
-    #Получение списка фотографий с атрибутами (photo_id, date, likes, url_max_photo_size)
-    print("________________GET__Q_PHOTOS___________________")
-    pprint(vk.get_user_profile_photo_list(owner_id))
-
-    # Получить токен для Яндекс.полигон из файла Settings_ya.txt 
-    with open('Settings_ya.txt', 'rt', encoding='utf-8') as file:
-        ya_token = file.readline()
-    log.write_event(datetime.now(), 'Загружен токен для Яндекс.Полигон из файла Settings_ya.txt')
+    # Получение списка фотографий с атрибутами (photo_id, date, likes, url_max_photo_size)
+    profile_photo_list = (vk.get_user_profile_photo_list(owner_id))
+    log.write_event(datetime.now(), 'Сформирован список фотографий с параметрами (photo_id, date, likes, url_max_photo_size)')
+    log.write_event(datetime.now(), f'photo list:\n{str(vk.get_user_profile_photo_list(owner_id))}')
     
+    # Запрос у пользователя количества фотографий, которые необходимо сохранить
+    print (f'Всего в профиле пользователя {len(profile_photo_list)} фото')
+    q_photos = input('Укажите сколько из них необходимо сохранить на яндекс_Диск: ')
+    profile_photo_list = profile_photo_list[0:int(q_photos)]
+    pprint(profile_photo_list)
+    log.write_event(datetime.now(), f'Пользователь выбрал для сохранения {q_photos} фото')
+
+    # Получить токен для Яндекс.полигон от пользователя 
+    ya_token = input('Введите токен для Яндекс.Полигон: ')
     uploader = Yandex(ya_token)
     log.write_event(datetime.now(), 'Авторизация в Яндекс.Полигон.')
-    #print(uploader.upload('star.jpg', '/VK_Photos/New.jpg'))
-    uploader.upload_from_vk(vk.get_user_profile_one_photo(owner_id), '/VK_Photos/New.jpg')
-    log.write_event(datetime.now(), f'Загрузка фото из профиля пользователя {owner_id} VK на Яндекс.Диск.')
 
-    print("__________________")
+    # Загрузка выбранного количества из списка фотографий
+    uploader.upload_photos_from_vk(profile_photo_list, '/VK_Photos/')
+    log.write_event(datetime.now(), f'Загружено {q_photos} фото из профиля пользователя {owner_id} VK на Яндекс.Диск.')
