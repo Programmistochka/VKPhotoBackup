@@ -11,7 +11,7 @@ class VK:
         """Метод инициализации класса VK"""
         self.token = access_token
         self.id = user_id
-        print(f"Инициализация класса: {self.id}")
+        #print(f"Инициализация класса: {self.id}")
         self.version = version
         self.params = {'access_token': self.token, 'v': self.version}
 
@@ -30,12 +30,13 @@ class VK:
             
             #поиск url-фото с максимальным размером
             photos = list(item['sizes'])
-            dict_photos = {photos[el]['url']:photos[el]['height'] for el in range(1, len(photos))}
+            dict_photos = {photos[el]['url']:photos[el]['height']*photos[el]['width'] for el in range(1, len(photos))}
             #добавление информации о фотографии в список
             list_photos.append({'photo_id': item['id'],
                                 'date': ph_date,
                                 'likes': item['likes']['count'],
-                                'url_max_photo_size': max(dict_photos)})
+                                'url_max_photo_size': max(dict_photos),
+                                'size': f'{dict_photos[max(dict_photos)]}px'})
         return list_photos
         
 class Yandex:
@@ -66,17 +67,21 @@ class Yandex:
         ya_url = 'v1/disk/resources/upload/'
         request_url = self.base_host + ya_url
         likes_list = [photo_list[n]['likes'] for n in range(0, len(photo_list))]
+        saved_photos = []
         for el in photo_list:
             if likes_list.count(el['likes']) == 1:
-                el_path = ya_path + str(el['likes']) + '.jpg'
+                photo_name = str(el['likes']) + '.jpg'
             else:
-                el_path = ya_path + str(el['likes']) + '_' + str(el['date']) + '.jpg' 
+                photo_name = str(el['likes']) + '_' + str(el['date']) + '.jpg'
+            el_path = ya_path + photo_name 
             params = {'url': el['url_max_photo_size'], 'path': el_path}
             response = requests.post(request_url, params=params, headers = self.get_headers())
             print('---'*30)
             if response.status_code == 202:
                 print(f'Фото {el["photo_id"]} загружено на Яндекс.Диск в каталог {el_path}')
-        return response.json()
+                saved_photos.append({'file_name': photo_name,
+                                     'size':el['size'] })
+        return saved_photos
 
 class Log:
 
@@ -101,10 +106,29 @@ class Log:
         with open(self.full_path, 'a') as f:
             f.write(f'{date_time_event[0:19]} {event}\n') 
        
-        
+class Report:
+
+    full_path = ''
+
+    def __init__(self, date_time):
+        """Метод инициализации класса Report"""
+        time_creation = str(date_time)
+        file_time = time_creation[0:10].replace('-','') + '_' + time_creation[11:19].replace(':','-') 
+        # Определение пути сохранения файла с отчетами
+        repfile_name = 'report_' + file_time + '.json'
+        current_path = os.getcwd() 
+        folder_name = 'reports'
+        self.full_path = os.path.join(current_path, folder_name, repfile_name)
+
+    def write_info(self, photo_list):
+        """Метод записи информации по работе программы в отчет"""
+        with open(self.full_path, 'a') as f:
+            f.writelines(str(photo_list)) 
+            
 if __name__ == '__main__':
     # Создание экземпляра класса Log для записи действий программы в лог-файл
-    log = Log(datetime.now())
+    time_start_prog = datetime.now()
+    log = Log(time_start_prog)
     
     # Получение токен vk из файла Settings_vk.txt
     with open('Settings_vk.txt', 'rt', encoding='utf-8') as file:
@@ -113,7 +137,7 @@ if __name__ == '__main__':
     log.write_event(datetime.now(), 'Загружен токен и user ID для VK из файла Settings_vk.txt')
     
     # Запрос информации от пользователя (user_id)
-    owner_id = input("Введите user_id для VK пользователя, у которого необходимо скопировать фото: ")
+    owner_id = input("Введите user_id для VK пользователя, у которого необходимо скопировать фото (9 цифр без id): ")
     log.write_event(datetime.now(), f'От пользователя получен owner_id: {owner_id}')
 
     # Создание экземпляра класса VK, для получения фотографий
@@ -129,7 +153,7 @@ if __name__ == '__main__':
     print (f'Всего в профиле пользователя {len(profile_photo_list)} фото')
     q_photos = input('Укажите сколько из них необходимо сохранить на яндекс_Диск: ')
     profile_photo_list = profile_photo_list[0:int(q_photos)]
-    pprint(profile_photo_list)
+    #pprint(profile_photo_list)
     log.write_event(datetime.now(), f'Пользователь выбрал для сохранения {q_photos} фото')
 
     # Получить токен для Яндекс.полигон от пользователя 
@@ -138,5 +162,10 @@ if __name__ == '__main__':
     log.write_event(datetime.now(), 'Авторизация в Яндекс.Полигон.')
 
     # Загрузка выбранного количества из списка фотографий
-    uploader.upload_photos_from_vk(profile_photo_list, '/VK_Photos/')
+    saved_photos_list=uploader.upload_photos_from_vk(profile_photo_list, '/VK_Photos/')
     log.write_event(datetime.now(), f'Загружено {q_photos} фото из профиля пользователя {owner_id} VK на Яндекс.Диск.')
+    
+    # Сохранение результата загрузки фотографий в отчетный файл
+    rep = Report(time_start_prog)
+    rep.write_info(saved_photos_list)
+    log.write_event(datetime.now(), f'Cоздан файл отчета и сохранен результат работы программы.')
