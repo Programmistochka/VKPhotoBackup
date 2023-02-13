@@ -54,6 +54,14 @@ class Yandex:
             'Authorization': f'OAuth {self.token}'
         }
     
+    def create_new_folder(self, foler_name):
+        """Метод для создания новой папки"""
+        url = r'v1/disk/resources?path=%2F'
+        request_url = self.base_host + url + folder_name
+        response = requests.put(request_url, headers = self.get_headers())
+        return response.status_code
+
+    
     def _get_upload_link(self, path):
         """Метод для получения ссылки для загрузки"""
         url = '/v1/disk/resources/upload/'
@@ -161,8 +169,16 @@ if __name__ == '__main__':
     uploader = Yandex(ya_token)
     log.write_event(datetime.now(), 'Авторизация в Яндекс.Полигон.')
 
+    # Создание новой папки на яндекс диске
+    folder_name = input('Введите имя новой папки для фотографий (допустимо использовать: буквы, цифры, пробелы и подчеркивания):')
+    if uploader.create_new_folder(folder_name) == 201:
+        folder_name = f'/{folder_name}/'
+    else:
+        print('Новую папку создать не удалось. Фотографии будут сохранены в папку: "VK_photos"')
+        folder_name = '/VK_Photos/'
+
     # Загрузка выбранного количества из списка фотографий
-    saved_photos_list=uploader.upload_photos_from_vk(profile_photo_list, '/VK_Photos/')
+    saved_photos_list=uploader.upload_photos_from_vk(profile_photo_list, folder_name)
     log.write_event(datetime.now(), f'Загружено {q_photos} фото из профиля пользователя {owner_id} VK на Яндекс.Диск.')
     
     # Сохранение результата загрузки фотографий в отчетный файл
