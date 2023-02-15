@@ -1,4 +1,5 @@
 import requests
+import json
 from pprint import pprint
 from datetime import datetime
 import os
@@ -86,7 +87,7 @@ class Yandex:
             response = requests.post(request_url, params=params, headers = self.get_headers())
             print('---'*30)
             if response.status_code == 202:
-                print(f'Фото {el["photo_id"]} загружено на Яндекс.Диск в каталог {el_path}')
+                print(f'Фото id{el["photo_id"]} загружено на Яндекс.Диск в каталог {el_path}')
                 saved_photos.append({'file_name': photo_name,
                                      'size':el['size'] })
         return saved_photos
@@ -105,7 +106,7 @@ class Log:
         folder_name = 'logs'
         self.full_path = os.path.join(current_path, folder_name, logfile_name)
         with open(self.full_path, 'x') as f:
-            f.write(f'{start_time[0:19]} Запуск програмы. Создание и сохранение лог-файла в каталоге {self.full_path}\n')
+            f.write(f'{start_time[0:19]} Запуск програмvы. Создание и сохранение лог-файла в каталоге {self.full_path}\n')
         print(f'Лог-файл {logfile_name} создан')
 
     def write_event(self, date_time, event: str):
@@ -130,8 +131,8 @@ class Report:
 
     def write_info(self, photo_list):
         """Метод записи информации по работе программы в отчет"""
-        with open(self.full_path, 'a') as f:
-            f.writelines(str(photo_list)) 
+        with open(self.full_path, 'a') as file:
+            json.dump(str(photo_list), file) 
             
 if __name__ == '__main__':
     # Создание экземпляра класса Log для записи действий программы в лог-файл
